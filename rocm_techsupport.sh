@@ -6,7 +6,9 @@
 # It requires 'sudo' supervisor privileges for some log collection
 # such as dmidecode, dmesg, lspci -vvv to read capabilities.
 # Author: srinivasan.subramanian@amd.com
-# Revision: V1.29
+# Revision: V1.30
+# V1.30: added log capture for Mellanox NIC
+#        updated PCIe link status to include GPU v-bridge 
 # V1.29: check 5.0 version
 # V1.28: add timestamp
 # V1.27: grab repo setup info
@@ -87,6 +89,8 @@ then
     echo "Section: Current boot logs"
     /bin/journalctl -b | /bin/grep -i -E ' Linux v| Command line|power|pnp|pci|gpu|drm|error|xgmi|panic|nmi|dazed|oop|fail|fault|atom|bios|kfd|vfio|iommu|ras_mask|ECC|smpboot.*CPU|pcieport.*AER'
     echo "Section: Previous boot logs"
+    /bin/journalctl -b -1 | /bin/grep -i -E ' Linux v| Command line|power|pnp|pci|gpu|drm|error|xgmi|panic|nmi|dazed|oop|fail|fault|atom|bios|kfd|vfio|iommu|ras_mask|ECC|smpboot.*CPU|pcieport.*AER'
+    echo "Section: Second Previous boot logs"
     /bin/journalctl -b -1 | /bin/grep -i -E ' Linux v| Command line|power|pnp|pci|gpu|drm|error|xgmi|panic|nmi|dazed|oop|fail|fault|atom|bios|kfd|vfio|iommu|ras_mask|ECC|smpboot.*CPU|pcieport.*AER'
     echo "Section: Second Previous boot logs"
     /bin/journalctl -b -2 | /bin/grep -i -E ' Linux v| Command line|power|pnp|pci|gpu|drm|error|xgmi|panic|nmi|dazed|oop|fail|fault|atom|bios|kfd|vfio|iommu|ras_mask|ECC|smpboot.*CPU|pcieport.*AER'
@@ -173,8 +177,6 @@ fi
 
 # DMIdecode information - BIOS etc
 echo "===== Section: dmidecode Information   ==============="
-/usr/sbin/dmidecode
-
 # PCI peripheral information
 echo "===== Section: lspci verbose output    ==============="
 if [ -f /usr/bin/lspci ]
@@ -271,7 +273,6 @@ do
     cat /sys/class/drm/card$i/device/current_link_width
     cat /sys/class/drm/card$i/device/current_link_speed
 done
-
     echo "===== Section: KFD PIDs sysfs kfd proc ==============="
 ls /sys/class/kfd/kfd/proc/
 
@@ -316,4 +317,152 @@ then
     $ROCM_VERSION/opencl/bin/clinfo
 fi
 
+# This section added to capture NIC configuration
 
+
+echo "===== Section: NVIDIA Mellanox Info    ==============="
+if [ -f /usr/bin/numactl ]
+then
+    /usr/bin/numactl -H
+else
+    echo "Note: Install numactl to get numa hardware listing information"
+    echo "    Ex: sudo apt install numactl "
+    echo "ROCmTechSupportNotFound: numactl utility not found!"
+fi
+
+
+echo "===== Section: NIC and GPU Link Status output    ==============="
+if [ -f /usr/bin/lspci ]
+then
+    echo "===== Run GPU PCIe Link Status concise =============== "
+    for i in `sudo /usr/bin/lspci | grep Display | awk '{print$1}'`
+    do
+	/usr/bin/lspci -s $i
+        for j in `sudo /usr/bin/lspci -s $i -PP| awk '{print$1}'| tr / " "`
+        do
+	    echo "  $j -" $(sudo /usr/bin/lspci -vvs $j | grep -E "LnkSta:")
+        done
+    done
+    echo "===== Run Mellanox NIC PCIe Link Status concise =============== "
+    for i in `sudo /usr/bin/lspci | grep Mellanox | awk '{print$1}'`
+    do
+	/usr/bin/lspci -s $i
+        for j in `sudo /usr/bin/lspci -s $i -PP| awk '{print$1}'| tr / " "`
+        do
+	    echo "  $j -" $(sudo /usr/bin/lspci -vvs $j | grep -E "LnkSta:")
+        done
+	sudo /usr/bin/lspci -vv -s $i |grep -A 3 "Part number"
+    done
+elif [ -f /usr/sbin/lspci ]
+then
+    echo "===== Run GPU PCIe Link Status concise =============== "
+    for i in `sudo /usr/sbin/lspci | grep Display | awk '{print$1}'`
+    do
+	/usr/sbin/lspci -s $i
+        for j in `sudo /usr/sbin/lspci -s $i -PP| awk '{print$1}'| tr / " "`
+        do
+	    echo "  $j -" $(sudo /usr/sbin/lspci -vvs $j | grep -E "LnkSta:")
+        done
+    done
+    echo "===== Run Mellanox NIC PCIe Link Status concise =============== "
+    for i in `sudo /usr/sbin/lspci | grep Mellanox | awk '{print$1}'`
+    do
+	/usr/sbin/lspci -s $i
+        for j in `sudo /usr/sbin/lspci -s $i -PP| awk '{print$1}'| tr / " "`
+        do
+	    echo "  $j -" $(sudo /usr/sbin/lspci -vvs $j | grep -E "LnkSta:")
+        done
+	sudo /usr/sbin/lspci -vv -s $i |grep -A 3 "Part number"
+    done
+elif [ -f /sbin/lspci ]
+then
+    echo "===== Run GPU PCIe Link Status concise =============== "
+    for i in `sudo /sbin/lspci | grep Display | awk '{print$1}'`
+    do
+	/sbin/lspci -s $i
+        for j in `sudo /sbin/lspci -s $i -PP| awk '{print$1}'| tr / " "`
+        do
+	    echo "  $j -" $(sudo /sbin/lspci -vvs $j | grep -E "LnkSta:")
+        done
+    done
+    echo "===== Run Mellanox NIC PCIe Link Status concise =============== "
+    for i in `sudo /sbin/lspci | grep Mellanox | awk '{print$1}'`
+    do
+	/usr/sbin/lspci -s $i
+        for j in `sudo /sbin/lspci -s $i -PP| awk '{print$1}'| tr / " "`
+        do
+	    echo "  $j -" $(sudo /sbin/lspci -vvs $j | grep -E "LnkSta:")
+        done
+	sudo /sbin/lspci -vv -s $i |grep -A 3 "Part number"
+    done
+else
+    echo "ROCmTechSupportNotFound: lspci utility not found!"
+fi
+
+echo "===== Section: NVIDIA Mellanox IB output    ==============="
+if [ -f /usr/bin/ibstat ]
+then
+    /usr/bin/ibstat
+elif [ -f /usr/sbin/ibstat ]
+then
+    /usr/sbin/ibstat
+elif [ -f /sbin/ibstat ]
+then
+    /sbin/ibstat
+else
+    echo "ROCmTechSupportNotFound: ibstat not found!"
+fi
+
+if [ -f /usr/bin/ibv_devinfo ]
+then
+    /usr/bin/ibv_devinfo
+elif [ -f /usr/sbin/ibv_devinfo ]
+then
+    /usr/sbin/ibv_devinfo
+elif [ -f /sbin/ibv_devinfo ]
+then
+    /sbin/ibv_devinfo
+else
+    echo "ROCmTechSupportNotFound: ibv_devinfo not found!"
+fi
+
+if [ -f /usr/bin/ibdev2netdev ]
+then
+    /usr/bin/ibdev2netdev
+    /usr/bin/ibdev2netdev -v
+
+elif [ -f /usr/sbin/ibdev2netdev ]
+then
+    /usr/sbin/ibdev2netdev
+    /usr/sbin/ibdev2netdev -v
+elif [ -f /sbin/ibdev2netdev ]
+then
+    /sbin/ibdev2netdev
+    /sbin/ibdev2netdev -v
+else
+    echo "ROCmTechSupportNotFound: ibdev2netdev not found!"
+fi
+
+# Mellanox OFED Information
+if [ -f /usr/bin/ofed_info ]
+then
+    /usr/bin/ofed_info -s
+else
+    echo "Note: Install Mellanox OFED to get Mellanox OFED information"
+    echo "ROCmTechSupportNotFound: ofed_info not found!"
+fi
+
+# Mellanox MST Dump
+echo "===== Section: NVIDIA Mellanox Software Tools output    ==============="
+if [ -f /usr/bin/mst ]
+then
+    sudo /usr/bin/mst start
+    sudo /usr/bin/mst status -v
+    for i in `sudo /usr/bin/mst status |grep pciconf |awk '{print $1}'`
+    do
+	/usr/bin/mlxconfig -d $i q 
+    done
+else
+    echo "Note: Install Mellanox OFED to get Mellanox Software Tools information"
+    echo "ROCmTechSupportNotFound: mst not found!"
+fi
